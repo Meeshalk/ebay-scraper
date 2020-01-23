@@ -1,17 +1,18 @@
 <?php
 
 namespace Meeshal\Scraper;
+use Soundasleep\Html2Text;
 
 
 class Ebay {
 
   protected $itemNumber = null;
-  private $temp = null;
-
-  private $tempSize = 0;
   protected $fields = [];
   protected $domain = "ebay.com";
   protected $data = [];
+
+  private $temp = null;
+  private $tempSize = 0;
 
   function __construct(Array $options = []){
     if(isset($options) && count($options) == 0)
@@ -122,17 +123,59 @@ class Ebay {
           $this->data['url'] = $this->generateUrlFromItemNUmber();
         break;
 
-      case 'image':
+      case 'images':
         $imageNode = $this->executeXpath(".//img[contains(concat(' ', normalize-space(@id), ' '), 'icImg')]/@src"); //alt gives url str
         if($imageNode->length >= 1)
-          $this->data['image'][] = trim($imageNode->item(0)->textContent);
+          $this->data['images'][] = trim($imageNode->item(0)->textContent);
         break;
 
+      case 'description':
+        $descriptionNode = $this->executeXpath(".//div[contains(concat(' ', normalize-space(@id), ' '), 'viTabs_0_pd')]");
+        if($descriptionNode->length >= 1){
+          $this->data['description'] = html2text::convert($this->generateHtml($descriptionNode->item(0)), ['ignore_errors' => true, 'drop_links' => true]);
+          $descriptionNode2 = $this->executeXpath(".//table[contains(concat(' ', normalize-space(@id), ' '), 'itmSellerDesc')]"); //alt gives url str
+          if($descriptionNode2->length >= 1){
+            $this->data['description'] = html2text::convert(
+              $this->removeDomNodes(
+                $this->removeDomNodes(
+                  $this->generateHtml(
+                    $descriptionNode2->item(0)),
+                    ".//div[contains(concat(' ', normalize-space(@id), ' '), 'itmCondDscOly')]"
+                  ),
+                  ".//a[contains(concat(' ', normalize-space(@id), ' '), 'itmCondOlyhlpIcon')]"
+                ), ['ignore_errors' => true, 'drop_links' => true]) . PHP_EOL . PHP_EOL . $this->data['description'];
+          }
+        }else{
+          $descriptionNode3 = $this->executeXpath(".//div[contains(concat(' ', normalize-space(@id), ' '), 'viTabs_0_is')]");
+          if($descriptionNode3->length >= 1){
+            $this->data['description'] = html2text::convert(
+              $this->removeDomNodes(
+                $this->removeDomNodes(
+                  $this->generateHtml(
+                    $descriptionNode3->item(0)),
+                    ".//div[contains(concat(' ', normalize-space(@id), ' '), 'itmCondDscOly')]"
+                  ),
+                  ".//a[contains(concat(' ', normalize-space(@id), ' '), 'itmCondOlyhlpIcon')]"
+                ), ['ignore_errors' => true, 'drop_links' => true]);
+          }
+        }
+
+        break;
 
       default:
         $this->data[$field] = 'NAN';
         break;
     }
+  }
+
+
+  private function removeDomNodes($html, $xpathString){
+    $dom = new \DOMDocument;
+    $dom->loadHtml($html);
+    $xpath = new \DOMXPath($dom);
+    while ($node = $xpath->query($xpathString)->item(0))
+      $node->parentNode->removeChild($node);
+    return $dom->saveHTML();
   }
 
   private function mirs($s){
